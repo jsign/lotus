@@ -22,6 +22,7 @@ import (
 	"github.com/filecoin-project/go-fil-markets/storagemarket"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/build"
+	"github.com/filecoin-project/specs-actors/actors/crypto"
 	sealing "github.com/filecoin-project/storage-fsm"
 	dag "github.com/ipfs/go-merkledag"
 	dstest "github.com/ipfs/go-merkledag/test"
@@ -148,9 +149,23 @@ func startDeal(t *testing.T, ctx context.Context, miner TestStorageNode, client 
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	addrNew, err := client.WalletNew(ctx, crypto.SigTypeBLS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := &types.Message{
+		From:     addr,
+		To:       addrNew,
+		Value:    types.NewInt(10000000000),
+		GasLimit: 1000, // ToDo: how to handle gas?
+		GasPrice: types.NewInt(0),
+	}
+	_, err = client.MpoolPushMessage(ctx, msg)
+	time.Sleep(time.Second)
 	deal, err := client.ClientStartDeal(ctx, &api.StartDealParams{
 		Data:              &storagemarket.DataRef{Root: fcid},
-		Wallet:            addr,
+		Wallet:            addrNew,
 		Miner:             maddr,
 		EpochPrice:        types.NewInt(1000000),
 		MinBlocksDuration: 100,
