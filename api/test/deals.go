@@ -12,11 +12,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ipfs/go-cid"
 	files "github.com/ipfs/go-ipfs-files"
+	ipfsfiles "github.com/ipfs/go-ipfs-files"
+	httpapi "github.com/ipfs/go-ipfs-http-client"
 	logging "github.com/ipfs/go-log/v2"
+	"github.com/ipfs/interface-go-ipfs-core/options"
 	"github.com/ipld/go-car"
 
 	"github.com/filecoin-project/go-fil-markets/storagemarket"
@@ -117,11 +121,26 @@ func makeDeal(t *testing.T, ctx context.Context, rseed int, client *impl.FullNod
 	data := make([]byte, 1600)
 	rand.New(rand.NewSource(int64(rseed))).Read(data)
 
-	r := bytes.NewReader(data)
-	fcid, err := client.ClientImportLocal(ctx, r)
+	maa, err := multiaddr.NewMultiaddr("/ip4/127.0.0.1/tcp/5001")
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
 	}
+	ipfs, err := httpapi.NewApi(maa)
+	if err != nil {
+		panic(err)
+	}
+
+	r := bytes.NewReader(data)
+	p, err := ipfs.Unixfs().Add(ctx, ipfsfiles.NewReaderFile(r), options.Unixfs.Pin(false))
+	if err != nil {
+		panic(err)
+	}
+
+	//fcid, err := client.ClientImportLocal(ctx, r)
+	//if err != nil {
+	//		t.Fatal(err)
+	//	}
+	fcid := p.Cid()
 
 	fmt.Println("FILE CID: ", fcid)
 
@@ -135,7 +154,10 @@ func makeDeal(t *testing.T, ctx context.Context, rseed int, client *impl.FullNod
 	info, err := client.ClientGetDealInfo(ctx, *deal)
 	require.NoError(t, err)
 
-	testRetrieval(t, ctx, err, client, fcid, &info.PieceCID, carExport, data)
+	if err := ipfs.Dag().Remove(ctx, fcid); err != nil {
+		panic(err)
+	}
+	testRetrieval(t, ctx, err, client, fcid, &info.PieceCID, carExport, nil)
 }
 
 func startDeal(t *testing.T, ctx context.Context, miner TestStorageNode, client *impl.FullNodeAPI, fcid cid.Cid, fastRet bool) *cid.Cid {
@@ -221,15 +243,18 @@ func testRetrieval(t *testing.T, ctx context.Context, err error, client *impl.Fu
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	ref := &api.FileRef{
-		Path:  filepath.Join(rpath, "ret"),
-		IsCAR: carExport,
-	}
-	err = client.ClientRetrieve(ctx, offers[0].Order(caddr), ref)
+	/*
+		ref := &api.FileRef{
+			Path:  filepath.Join(rpath, "ret"),
+			IsCAR: carExport,
+		}
+	*/
+	//ipfsAPI.Dag().Remove(ctx, fcid)
+	err = client.ClientRetrieve(ctx, offers[0].Order(caddr), nil)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
+	return // Early test return, we only want to feed the data to filecoin.
 
 	rdata, err := ioutil.ReadFile(filepath.Join(rpath, "ret"))
 	if err != nil {
