@@ -284,6 +284,9 @@ func builder(t *testing.T, nFull int, storage []test.StorageMiner) ([]test.TestN
 }
 
 func mockSbBuilder(t *testing.T, nFull int, storage []test.StorageMiner) ([]test.TestNode, []test.TestStorageNode) {
+	saminer.SupportedProofTypes = map[abi.RegisteredSealProof]struct{}{
+		abi.RegisteredSealProof_StackedDrg512MiBV1: {},
+	}
 	ctx := context.Background()
 	mn := mocknet.New(ctx)
 
@@ -316,7 +319,7 @@ func mockSbBuilder(t *testing.T, nFull int, storage []test.StorageMiner) ([]test
 			preseals = test.GenesisPreseals
 		}
 
-		genm, k, err := mockstorage.PreSeal(2048, maddr, preseals)
+		genm, k, err := mockstorage.PreSeal(512*1024*1024, maddr, preseals)
 		if err != nil {
 			t.Fatal(err)
 		}
