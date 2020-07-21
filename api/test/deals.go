@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math/big"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ import (
 	"github.com/filecoin-project/go-fil-markets/storagemarket"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/build"
+	"github.com/filecoin-project/specs-actors/actors/crypto"
 	sealing "github.com/filecoin-project/storage-fsm"
 	dag "github.com/ipfs/go-merkledag"
 	dstest "github.com/ipfs/go-merkledag/test"
@@ -67,6 +69,38 @@ func TestDealFlow(t *testing.T, b APIBuilder, blocktime time.Duration, carExport
 		}
 	}()
 
+	addrMiner, err := client.WalletDefaultAddress(ctx)
+	if err != nil {
+		panic(err)
+	}
+
+	addrNew, err := client.WalletNew(ctx, crypto.SigTypeBLS)
+	if err != nil {
+		panic(err)
+	}
+
+	msg := &types.Message{
+		From:     addrMiner,
+		To:       addrNew,
+		Value:    types.BigInt{Int: big.NewInt(300000)},
+		GasLimit: 1000,
+		GasPrice: types.NewInt(0),
+	}
+	_, err = client.MpoolPushMessage(ctx, msg)
+	if err != nil {
+		panic(err)
+	}
+
+	for {
+		bal, err := client.WalletBalance(ctx, addrNew)
+		if err != nil {
+			panic(err)
+		}
+		if bal.Int64() > 0 {
+			panic("DONE")
+		}
+		fmt.Println("WAITING")
+	}
 	makeDeal(t, ctx, 6, client, miner, carExport, fastRet)
 
 	atomic.AddInt64(&mine, -1)
