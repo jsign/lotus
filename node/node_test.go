@@ -44,6 +44,7 @@ import (
 	"github.com/filecoin-project/lotus/miner"
 	"github.com/filecoin-project/lotus/node"
 	"github.com/filecoin-project/lotus/node/modules"
+	"github.com/filecoin-project/lotus/node/modules/dtypes"
 	modtest "github.com/filecoin-project/lotus/node/modules/testing"
 	"github.com/filecoin-project/lotus/node/repo"
 	sectorstorage "github.com/filecoin-project/sector-storage"
@@ -361,7 +362,7 @@ func mockSbBuilder(t *testing.T, nFull int, storage []test.StorageMiner) ([]test
 		} else {
 			genesis = node.Override(new(modules.Genesis), modules.LoadGenesis(genbuf.Bytes()))
 		}
-
+		ipfsAddr := "/ip4/127.0.0.1/tcp/5001"
 		var err error
 		// TODO: Don't ignore stop
 		_, err = node.New(ctx,
@@ -372,6 +373,8 @@ func mockSbBuilder(t *testing.T, nFull int, storage []test.StorageMiner) ([]test
 			node.Test(),
 
 			node.Override(new(ffiwrapper.Verifier), mock.MockVerifier),
+			node.ApplyIf(func(s *node.Settings) bool { return true },
+				node.Override(new(dtypes.ClientBlockstore), modules.IpfsClientBlockstore(ipfsAddr, true))),
 
 			genesis,
 		)
