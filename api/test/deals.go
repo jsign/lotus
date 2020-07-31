@@ -12,11 +12,16 @@ import (
 	"testing"
 	"time"
 
+	ipfsfiles "github.com/ipfs/go-ipfs-files"
+	httpapi "github.com/ipfs/go-ipfs-http-client"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ipfs/go-cid"
 	files "github.com/ipfs/go-ipfs-files"
 	logging "github.com/ipfs/go-log/v2"
+	"github.com/ipfs/interface-go-ipfs-core/options"
+	"github.com/ipfs/interface-go-ipfs-core/path"
 	"github.com/ipld/go-car"
 
 	"github.com/filecoin-project/go-fil-markets/storagemarket"
@@ -119,15 +124,27 @@ func TestDoubleDealFlow(t *testing.T, b APIBuilder, blocktime time.Duration) {
 	<-done
 }
 
+var ipfs *httpapi.HttpApi
+
 func makeDeal(t *testing.T, ctx context.Context, rseed int, client *impl.FullNodeAPI, miner TestStorageNode, carExport, fastRet bool) {
 	data := make([]byte, 1600)
 	rand.New(rand.NewSource(int64(rseed))).Read(data)
 
+	maa, err := multiaddr.NewMultiaddr("/ip4/127.0.0.1/tcp/5001")
+	if err != nil {
+		panic(err)
+	}
+	ipfs, err = httpapi.NewApi(maa)
+	if err != nil {
+		panic(err)
+	}
+
 	r := bytes.NewReader(data)
-	fcid, err := client.ClientImportLocal(ctx, r)
+	p, err := ipfs.Unixfs().Add(ctx, ipfsfiles.NewReaderFile(r), options.Unixfs.Pin(false))
 	if err != nil {
 		t.Fatal(err)
 	}
+	fcid := p.Cid()
 
 	fmt.Println("FILE CID: ", fcid)
 
@@ -141,7 +158,10 @@ func makeDeal(t *testing.T, ctx context.Context, rseed int, client *impl.FullNod
 	info, err := client.ClientGetDealInfo(ctx, *deal)
 	require.NoError(t, err)
 
-	testRetrieval(t, ctx, err, client, fcid, &info.PieceCID, carExport, data)
+	if err := ipfs.Dag().Remove(ctx, fcid); err != nil {
+		panic(err)
+	}
+	testRetrieval(t, ctx, err, client, fcid, &info.PieceCID, carExport, nil)
 }
 
 func TestSenondDealRetrieval(t *testing.T, b APIBuilder, blocktime time.Duration) {
@@ -291,7 +311,7 @@ func startSealingWaiting(t *testing.T, ctx context.Context, miner TestStorageNod
 }
 
 func testRetrieval(t *testing.T, ctx context.Context, err error, client *impl.FullNodeAPI, fcid cid.Cid, piece *cid.Cid, carExport bool, data []byte) {
-	offers, err := client.ClientFindData(ctx, fcid, piece)
+	offers, err := client.ClientFindData(ctx, fcid, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,14 +331,18 @@ func testRetrieval(t *testing.T, ctx context.Context, err error, client *impl.Fu
 		t.Fatal(err)
 	}
 
-	ref := &api.FileRef{
-		Path:  filepath.Join(rpath, "ret"),
-		IsCAR: carExport,
-	}
-	err = client.ClientRetrieve(ctx, offers[0].Order(caddr), ref)
+	err = client.ClientRetrieve(ctx, offers[0].Order(caddr), nil)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
+
+	// Uhm, let's check if it's in IPFS as it should...
+	stat, err := ipfs.Object().Stat(ctx, path.IpfsPath(fcid))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Stats: %v\n", stat)
+	return
 
 	rdata, err := ioutil.ReadFile(filepath.Join(rpath, "ret"))
 	if err != nil {
