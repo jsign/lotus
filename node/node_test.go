@@ -331,7 +331,7 @@ func mockSbBuilder(t *testing.T, nFull int, storage []test.StorageMiner) ([]test
 			preseals = test.GenesisPreseals
 		}
 
-		genm, k, err := mockstorage.PreSeal(2048, maddr, preseals)
+		genm, k, err := mockstorage.PreSeal(512*1024*1024, maddr, preseals)
 		if err != nil {
 			t.Fatal(err)
 		}

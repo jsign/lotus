@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	saminer "github.com/filecoin-project/specs-actors/actors/builtin/miner"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ipfs/go-cid"
@@ -23,6 +24,7 @@ import (
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/build"
 	"github.com/filecoin-project/lotus/miner"
+	"github.com/filecoin-project/specs-actors/actors/abi"
 	sealing "github.com/filecoin-project/storage-fsm"
 	dag "github.com/ipfs/go-merkledag"
 	dstest "github.com/ipfs/go-merkledag/test"
@@ -45,7 +47,9 @@ func init() {
 
 func TestDealFlow(t *testing.T, b APIBuilder, blocktime time.Duration, carExport, fastRet bool) {
 	_ = os.Setenv("BELLMAN_NO_GPU", "1")
-
+	saminer.SupportedProofTypes = map[abi.RegisteredSealProof]struct{}{
+		abi.RegisteredSealProof_StackedDrg512MiBV1: {},
+	}
 	ctx := context.Background()
 	n, sn := b(t, 1, oneMiner)
 	client := n[0].FullNode.(*impl.FullNodeAPI)
@@ -120,7 +124,8 @@ func TestDoubleDealFlow(t *testing.T, b APIBuilder, blocktime time.Duration) {
 }
 
 func makeDeal(t *testing.T, ctx context.Context, rseed int, client *impl.FullNodeAPI, miner TestStorageNode, carExport, fastRet bool) {
-	data := make([]byte, 1600)
+
+	data := make([]byte, 10*1024*1024)
 	rand.New(rand.NewSource(int64(rseed))).Read(data)
 
 	r := bytes.NewReader(data)
@@ -292,7 +297,7 @@ func startDeal(t *testing.T, ctx context.Context, miner TestStorageNode, client 
 		},
 		Wallet:            addr,
 		Miner:             maddr,
-		EpochPrice:        types.NewInt(1000000),
+		EpochPrice:        types.NewInt(100000000),
 		MinBlocksDuration: uint64(build.MinDealDuration),
 		FastRetrieval:     fastRet,
 	})
