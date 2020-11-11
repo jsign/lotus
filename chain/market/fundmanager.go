@@ -363,6 +363,8 @@ func (a *fundedAddress) processReservations(reservations []*fundRequest, release
 		}
 	}()
 
+	fmt.Printf("RESERVATIONS: %d\n", len(reservations))
+
 	// Split reservations into those that are covered by released amounts,
 	// and those to add to the reserved amount.
 	// Note that we process requests from the same wallet in batches. So some
