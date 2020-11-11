@@ -2,6 +2,7 @@ package market
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/filecoin-project/go-address"
@@ -334,12 +335,15 @@ func (a *fundedAddress) processReservations(reservations []*fundRequest, release
 	defer func() {
 		// If there's an error, mark all requests as errored
 		if prerr != nil {
+			fmt.Printf("WHAT\n")
+			fmt.Printf("LLL: %d %d\n", len(reservations), len(releases))
 			for _, req := range append(reservations, releases...) {
 				req.Complete(cid.Undef, prerr)
 			}
 			return
 		}
 
+		fmt.Printf("LLLOOUU\n")
 		// Complete all release requests
 		for _, req := range releases {
 			req.Complete(cid.Undef, nil)
