@@ -814,8 +814,7 @@ uiLoop:
 				}
 			}
 
-			// TODO: price is based on PaddedPieceSize, right?
-			epochPrice := types.BigDiv(types.BigMul(pricePerGib, types.NewInt(uint64(ds.PieceSize))), gib)
+			epochPrice := types.BigDiv(types.BigMul(pricePerGib, types.NewInt(uint64(ds.PieceSize.Unpadded()))), gib)
 			totalPrice := types.BigMul(epochPrice, types.NewInt(uint64(epochs)))
 
 			afmt.Printf("Total price: ~%s (%s per epoch)\n", color.CyanString(types.FIL(totalPrice).String()), types.FIL(epochPrice))
