@@ -407,6 +407,7 @@ func mockSbBuilderOpts(t *testing.T, fullOpts []test.FullNodeOpts, storage []tes
 			genesis = node.Override(new(modules.Genesis), modules.LoadGenesis(genbuf.Bytes()))
 		}
 
+		onlineMode := true
 		stop, err := node.New(ctx,
 			node.FullAPI(&fulls[i].FullNode, node.Lite(fullOpts[i].Lite)),
 			node.Online(),
@@ -420,6 +421,9 @@ func mockSbBuilderOpts(t *testing.T, fullOpts []test.FullNodeOpts, storage []tes
 			node.Override(new(dtypes.Bootstrapper), dtypes.Bootstrapper(true)),
 
 			genesis,
+
+			node.Override(new(dtypes.ClientBlockstore), modules.IpfsClientBlockstore("/ip4/127.0.0.1/tcp/5001", onlineMode)),
+			node.Override(new(dtypes.ClientRetrievalStoreManager), modules.ClientBlockstoreRetrievalStoreManager),
 
 			fullOpts[i].Opts(fulls),
 		)

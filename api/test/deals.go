@@ -11,13 +11,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ipfs/go-cid"
-	files "github.com/ipfs/go-ipfs-files"
-	"github.com/ipld/go-car"
+	"github.com/filecoin-project/go-state-types/abi"
+	"github.com/multiformats/go-multiaddr"
+
 	"github.com/stretchr/testify/require"
 
+	"github.com/ipfs/go-cid"
+	files "github.com/ipfs/go-ipfs-files"
+	"github.com/ipfs/interface-go-ipfs-core/path"
+	"github.com/ipld/go-car"
+
 	"github.com/filecoin-project/go-fil-markets/storagemarket"
-	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/build"
 	"github.com/filecoin-project/lotus/chain/actors/builtin/market"
@@ -25,12 +29,16 @@ import (
 	sealing "github.com/filecoin-project/lotus/extern/storage-sealing"
 	"github.com/filecoin-project/lotus/markets/storageadapter"
 	"github.com/filecoin-project/lotus/node"
-	"github.com/filecoin-project/lotus/node/impl"
 	market2 "github.com/filecoin-project/specs-actors/v2/actors/builtin/market"
 	ipld "github.com/ipfs/go-ipld-format"
 	dag "github.com/ipfs/go-merkledag"
 	dstest "github.com/ipfs/go-merkledag/test"
 	unixfile "github.com/ipfs/go-unixfs/file"
+
+	"github.com/filecoin-project/lotus/node/impl"
+
+	ipfsfiles "github.com/ipfs/go-ipfs-files"
+	httpapi "github.com/ipfs/go-ipfs-http-client"
 )
 
 func TestDealFlow(t *testing.T, b APIBuilder, blocktime time.Duration, carExport, fastRet bool, startEpoch abi.ChainEpoch) {
@@ -191,10 +199,17 @@ func TestFastRetrievalDealFlow(t *testing.T, b APIBuilder, blocktime time.Durati
 	rand.New(rand.NewSource(int64(8))).Read(data)
 
 	r := bytes.NewReader(data)
-	fcid, err := s.client.ClientImportLocal(s.ctx, r)
+	addr, _ := multiaddr.NewMultiaddr("/ip4/127.0.0.1/tcp/5001")
+	ipfs, err := httpapi.NewApi(addr)
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
 	}
+	ctx := context.Background()
+	pth, err := ipfs.Unixfs().Add(ctx, ipfsfiles.NewReaderFile(r))
+	if err != nil {
+		panic(err)
+	}
+	fcid := pth.Cid()
 
 	fmt.Println("FILE CID: ", fcid)
 
@@ -206,7 +221,11 @@ func TestFastRetrievalDealFlow(t *testing.T, b APIBuilder, blocktime time.Durati
 	info, err := s.client.ClientGetDealInfo(s.ctx, *deal)
 	require.NoError(t, err)
 
-	testRetrieval(t, s.ctx, s.client, fcid, &info.PieceCID, false, data)
+	if err := ipfs.Dag().Remove(ctx, fcid); err != nil {
+		panic(err)
+	}
+
+	testRetrieval(t, ctx, s.client, fcid, &info.PieceCID, false, data)
 }
 
 func TestSecondDealRetrieval(t *testing.T, b APIBuilder, blocktime time.Duration) {
@@ -391,10 +410,7 @@ func testRetrieval(t *testing.T, ctx context.Context, client api.FullNode, fcid 
 		t.Fatal(err)
 	}
 
-	ref := &api.FileRef{
-		Path:  filepath.Join(rpath, "ret"),
-		IsCAR: carExport,
-	}
+	var ref *api.FileRef
 	updates, err := client.ClientRetrieveWithEvents(ctx, offers[0].Order(caddr), ref)
 	if err != nil {
 		t.Fatal(err)
@@ -405,13 +421,19 @@ func testRetrieval(t *testing.T, ctx context.Context, client api.FullNode, fcid 
 		}
 	}
 
-	rdata, err := ioutil.ReadFile(filepath.Join(rpath, "ret"))
+	addr, _ := multiaddr.NewMultiaddr("/ip4/127.0.0.1/tcp/5001")
+	ipfs, err := httpapi.NewApi(addr)
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
+	}
+	n, err := ipfs.Unixfs().Get(ctx, path.IpfsPath(fcid))
+	if err != nil {
+		panic(err)
 	}
 
-	if carExport {
-		rdata = extractCarData(t, ctx, rdata, rpath)
+	rdata, err := ioutil.ReadAll(ipfsfiles.ToFile(n))
+	if err != nil {
+		panic(err)
 	}
 
 	if !bytes.Equal(rdata, data) {
